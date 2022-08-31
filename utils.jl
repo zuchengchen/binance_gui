@@ -1,5 +1,8 @@
-using CairoMakie, Random, TimeSeries, Dates, GLMakie
+using CairoMakie, Random, TimeSeries, Dates, GLMakie, DataFrames, DataStructures, ProgressMeter
 using JSON, HTTP,  DataFrames
+import HTTP, JSON, SHA, Printf, CSV
+
+include("kline.jl")
 
 query_head() = "recvWindow=$recvWindow&timestamp=$(timestamp_now())"
 
@@ -20,35 +23,7 @@ function request_get(url)
 end
 
 const BINANCE_FUTURE_BASE_URL = "https://fapi.binance.com"
-
 const BINANCE_FUTURE_KLINES_URL = "$BINANCE_FUTURE_BASE_URL/fapi/v1/klines"
-
-"""
-Get klines of symbol.
-intervel can be "1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w", "1M";
-limit <= 1500
-"""
-function get_klines(symbol; start_datetime=nothing, end_datetime=nothing, interval="1m", limit=1000)
-    query = "?$(query_head())&symbol=$symbol&interval=$interval&limit=$limit"
-    if start_datetime != nothing && end_datetime != nothing
-        start_time = datetime_to_timestamp(start_datetime)
-        end_time = datetime_to_timestamp(end_datetime)
-        query = "$query&startTime=$start_time&endTime=$end_time"
-    end
-    url = "$BINANCE_FUTURE_KLINES_URL$query"
-    request_get(url)
-end
-
-function get_klines_df(symbol; interval="1m", limit=1000)
-    klines = get_klines(symbol, interval=interval, limit=limit)
-    Open = parse.(Float64, [k[2] for k in klines])
-    High = parse.(Float64, [k[3] for k in klines])
-    Low = parse.(Float64, [k[4] for k in klines])
-    Close = parse.(Float64, [k[5] for k in klines])
-    DataFrame(Open=Open, High=High, Low=Low, Close=Close)
-end
-
-
 const BINANCE_FUTURE_BASE_URL = "https://fapi.binance.com"
 const BINANCE_FUTURE_ORDER_URL = "$BINANCE_FUTURE_BASE_URL/fapi/v1/order"
 const BINANCE_FUTURE_KLINES_URL = "$BINANCE_FUTURE_BASE_URL/fapi/v1/klines"
@@ -58,8 +33,7 @@ const BINANCE_FUTURE_TIME_URL = "$BINANCE_FUTURE_BASE_URL/fapi/v1/time"
 const BINANCE_FUTURE_EXCHANGEINFO_URL = "https://www.binance.com/fapi/v1/exchangeInfo"
 const BINANCE_FUTURE_AGGTRADES_URL = "$BINANCE_FUTURE_BASE_URL/fapi/v1/aggTrades"
 
-import HTTP, JSON, SHA, Printf, CSV
-using DataFrames, DataStructures, ProgressMeter
+
 
 recvWindow = 60000
 
@@ -207,31 +181,13 @@ function ping(url)
     r.status
 end
 
-
-"""
-Convert HTTP response to JSON
-"""
-function response_to_json(response)
-    JSON.parse(String(response))
-end
-
-
-"""
-Get the request and convert to json.
-"""
-function request_get(url)
-    response = HTTP.request("GET", url)
-    response_to_json(response.body)
-end
-
-
 """
 Convert an order_dict to an string parameter.
 """
 function order_dict_to_params(order_dict::Dict)
     params = ""
     for (key, value) in order_dict
-        params = "$params&$key=$value"
+        params *= "&$key=$value"
     end
     params[2:end]
 end
@@ -405,4 +361,195 @@ function change_margin_mode(user, symbol, marginType)
 
         response_to_json(response.body)["msg"]
     end
+end
+
+
+# Get current position information.
+function get_position(user, symbol)
+    query = "$(query_head())&symbol=$symbol"
+    signature = do_sign(query, user)
+    body = "$BINANCE_FUTURE_BASE_URL/fapi/v2/positionRisk?$query&signature=$signature"
+    response = HTTP.request("GET", body, user.headers)
+    response_to_json(response.body)[1]
+end
+
+function get_position(user)
+    query = "$(query_head())"
+    signature = do_sign(query, user)
+    body = "$BINANCE_FUTURE_BASE_URL/fapi/v2/positionRisk?$query&signature=$signature"
+    response = HTTP.request("GET", body, user.headers)
+    response_to_json(response.body)
+end
+
+
+"""
+Get Binance information.
+"""
+get_Binance_info() = request_get(BINANCE_FUTURE_EXCHANGEINFO_URL)
+
+function  get_position(account_info, symbol)
+    filter(x -> x["symbol"]==symbol, account_info["positions"])[1]
+end
+
+"""
+Check an order's status.
+Either orderId or origClientOrderId must be sent.
+"""
+function query_order(user, symbol; orderId=0, clientOrderId="")
+    if orderId != 0
+        query = "$(query_head())&symbol=$symbol&orderId=$orderId"
+    elseif clientOrderId != ""
+        query = "$(query_head())&symbol=$symbol&origClientOrderId=$clientOrderId"
+    end
+
+    signature = do_sign(query, user)
+    body = "$BINANCE_FUTURE_BASE_URL/fapi/v1/order?$query&signature=$signature"
+    response = HTTP.request("GET", body, user.headers)
+    response_to_json(response.body)
+end
+
+
+"""
+Cancel an order from user.
+"""
+function cancel_order(user, order)
+    query = "$(query_head())&symbol=$(order["symbol"])&origClientOrderId=$(order["clientOrderId"])"
+    signature = do_sign(query, user)
+    body = "$BINANCE_FUTURE_ORDER_URL?$query&signature=$signature"
+    response = HTTP.request("DELETE", body, user.headers)
+    response_to_json(response.body)
+end
+
+"""
+Cancel an order from user.
+"""
+function cancel_order(user, symbol; orderId=0, clientOrderId="")
+    if orderId != 0
+        query = "$(query_head())&symbol=$symbol&orderId=$orderId"
+    elseif clientOrderId != ""
+        query = "$(query_head())&symbol=$symbol&origClientOrderId=$clientOrderId"
+    end
+
+    signature = do_sign(query, user)
+    body = "$BINANCE_FUTURE_ORDER_URL?$query&signature=$signature"
+    response = HTTP.request("DELETE", body, user.headers)
+    response_to_json(response.body)
+end
+
+
+"""
+Execute an order to the account.
+"""
+function execute_order(order::Dict, user::User)
+    order_params = order_dict_to_params(order)
+    query = "$(query_head())&$order_params"
+    signature = do_sign(query, user)
+    body = "$BINANCE_FUTURE_ORDER_URL?$query&signature=$signature"   
+    response = HTTP.request("POST", body, user.headers)
+    response_to_json(response.body)
+end
+
+"""
+Cancel All Open Orders (TRADE)
+"""
+function cancel_all_open_orders(user, symbol)
+    query = "$(query_head())&symbol=$symbol"
+    signature = do_sign(query, user)
+    body = "$BINANCE_FUTURE_BASE_URL/fapi/v1/allOpenOrders?$query&signature=$signature"
+    response = HTTP.request("DELETE", body, user.headers)
+    response_to_json(response.body)
+end
+
+
+"""
+Create an order dict to be executed later.
+"""
+function create_order_dict(symbol::String, type::String, side::String;
+    quantity::Float64=0.0, price::Float64=0.0, stopPrice::Float64=0.0,
+    timeInForce::String="GTC", newClientOrderId::String="", newOrderRespType::String="RESULT",
+    workingType::String="CONTRACT_PRICE", priceProtect::String="FALSE", positionSide::String="", reduceOnly::String="")
+
+    if quantity <= 0.0
+        error("Quantity cannot be <=0.")
+    end
+
+    println("$side $symbol $quantity qty @ $price price.")
+
+    order = Dict{String, Any}(
+        "symbol" => symbol,
+        "type" => type,
+        "side" => side,
+        "newOrderRespType" => newOrderRespType
+    )
+
+    if newClientOrderId != ""
+        order["newClientOrderId"] = newClientOrderId
+    end
+
+    if positionSide != ""
+        order["positionSide"] = positionSide
+    end
+
+    if reduceOnly != ""
+        order["reduceOnly"] = reduceOnly
+    end
+
+
+    if type in ["LIMIT", "STOP", "TAKE_PROFIT"]
+
+        if price <= 0.0
+            error("Price should be no smaller than 0.")
+        end
+        order["price"] = price
+        order["timeInForce"] = timeInForce
+    end
+
+    if type in ["LIMIT"]
+        if price * quantity < 5.0
+            error("Order's notional must be no smaller than 5.0 (unless you choose reduce only)")
+        end
+        order["quantity"] = quantity
+    end
+
+    if type in ["MARKET", "STOP", "TAKE_PROFIT", "STOP_MARKET", "TAKE_PROFIT_MARKET"]
+        order["quantity"] = quantity
+    end
+
+    if type in ["TRAILING_STOP_MARKET"]
+        order["callbackRate"] = callbackRate
+    end
+
+    # trigger price 
+    if type in ["STOP", "TAKE_PROFIT", "STOP_MARKET", "TAKE_PROFIT_MARKET"]
+        if stopPrice <= 0.0
+            error("Stop price should be no smaller than 0.")
+        end
+        order["stopPrice"] = stopPrice
+        order["workingType"] = workingType
+        order["priceProtect"] = priceProtect
+    end
+
+    order
+end
+
+"""
+Get open orders.
+"""
+function get_open_orders(user)
+    query = query_head()
+    signature = do_sign(query, user)
+    body = "$BINANCE_FUTURE_BASE_URL/fapi/v1/openOrders?$query&signature=$signature"
+    response = HTTP.request("GET", body, user.headers)
+    response_to_json(response.body)
+end
+
+"""
+Get open orders.
+"""
+function get_open_orders(user, symbol)
+    query = "$(query_head())&symbol=$symbol"
+    signature = do_sign(query, user)
+    body = "$BINANCE_FUTURE_BASE_URL/fapi/v1/openOrders?$query&signature=$signature"
+    response = HTTP.request("GET", body, user.headers)
+    response_to_json(response.body)
 end
