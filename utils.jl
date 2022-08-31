@@ -365,15 +365,15 @@ end
 
 
 # Get current position information.
-function get_position(user, symbol)
+function get_position(user::User, symbol)
     query = "$(query_head())&symbol=$symbol"
     signature = do_sign(query, user)
     body = "$BINANCE_FUTURE_BASE_URL/fapi/v2/positionRisk?$query&signature=$signature"
     response = HTTP.request("GET", body, user.headers)
-    response_to_json(response.body)[1]
+    response_to_json(response.body)
 end
 
-function get_position(user)
+function get_position(user::User)
     query = "$(query_head())"
     signature = do_sign(query, user)
     body = "$BINANCE_FUTURE_BASE_URL/fapi/v2/positionRisk?$query&signature=$signature"
@@ -387,8 +387,8 @@ Get Binance information.
 """
 get_Binance_info() = request_get(BINANCE_FUTURE_EXCHANGEINFO_URL)
 
-function  get_position(account_info, symbol)
-    filter(x -> x["symbol"]==symbol, account_info["positions"])[1]
+function  get_position(account_info::Dict, symbol)
+    filter(x -> x["symbol"]==symbol, account_info["positions"])
 end
 
 """
@@ -552,4 +552,10 @@ function get_open_orders(user, symbol)
     body = "$BINANCE_FUTURE_BASE_URL/fapi/v1/openOrders?$query&signature=$signature"
     response = HTTP.request("GET", body, user.headers)
     response_to_json(response.body)
+end
+
+
+function get_presions(symbol)
+    symbol_info = filter(x -> x["symbol"]==symbol, get_Binance_info()["symbols"])[1]
+    symbol_info["pricePrecision"], symbol_info["quantityPrecision"]
 end
