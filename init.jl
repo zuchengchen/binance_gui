@@ -1,4 +1,4 @@
-# add CairoMakie, Random, TimeSeries, Dates, GLMakie, DataFrames, DataStructures, ProgressMeter, JSON, HTTP, SHA, Printf, CSV
+# add CairoMakie, Random, TimeSeries, Dates, GLMakie, DataFrames, DataStructures, ProgressMeter, JSON, HTTP, SHA, Printf, CSV, Indicators
 # using CairoMakie, Random, TimeSeries, GLMakie, DataFrames, DataStructures, ProgressMeter
 using CairoMakie, GLMakie, DataFrames
 import HTTP, JSON, SHA, CSV, Indicators, Dates

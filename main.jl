@@ -1,10 +1,10 @@
 include("init.jl")
-const kline_limit = 200 # number of candlesticks (klines) to fetch and show
+const kline_limit = 500 # number of candlesticks (klines) to fetch and show
 
-coin_pair = Observable("ETCUSDT")
+coin_pair = Observable("FLMUSDT")
 time_interval = Observable("5m")
-leverage = Observable(75)
-stop_pct = Observable(3e-3)
+leverage = Observable(8)
+stop_pct = Observable(1e-1)
 profit_pct = Observable(5e-3);
 
 # choose Long or Short mode
@@ -132,10 +132,10 @@ ylims!(ax1, y_min[], y_max[])
 
 
 # menus 
-menu_symbol = Menu(fig, options=["BTCUSDT", "EOSUSDT", "ETHUSDT", "ETCUSDT"], default=coin_pair[])
+menu_symbol = Menu(fig, options=["DUSKUSDT", "TRBUSDT", "STORJUSDT", "XVGUSDT", "XVSUSDT", "RNDRUSDT", "MTLUSDT", "XLMUSDT", "BTCUSDT", "EOSUSDT", "ETHUSDT", "ETCUSDT", "FLMUSDT", "CHRUSDT", "AGLDUSDT", "ACHUSDT", "WAVESUSDT", "MDTUSDT", "SFPUSDT"], default=coin_pair[])
 menu_time_interval = Menu(fig, options=["1m", "3m", "5m", "15m", "1h", "4h"], default=time_interval[])
-menu_leverage = Menu(fig, options=zip(["10", "20", "30", "50", "75", "100"], [10, 20, 30, 50, 75, 100]), default=string(leverage[]))
-menu_stop = Menu(fig, options=zip(["1", "2", "3", "4", "5", "10"], [1e-3, 2e-3, 3e-3, 4e-3, 5e-3, 1e-2]), default=string(Int(stop_pct[] * 1000)))
+menu_leverage = Menu(fig, options=zip(["8", "10", "20", "30", "50", "75", "100"], [8, 10, 20, 30, 50, 75, 100]), default=string(leverage[]))
+menu_stop = Menu(fig, options=zip(["1", "2", "3", "4", "5", "10", "100"], [1e-3, 2e-3, 3e-3, 4e-3, 5e-3, 1e-2, 1e-1]), default=string(Int(stop_pct[] * 1000)))
 menu_profit = Menu(fig, options=zip(["1", "2", "3", "4", "5", "10"], [1e-3, 2e-3, 3e-3, 4e-3, 5e-3, 1e-2]), default=string(Int(profit_pct[] * 1000)))
 
 fig[1:vratio+1, hratio+1] = vgrid!(
@@ -212,7 +212,7 @@ on(events(ax1).keyboardbutton) do event
         _open_price = round(mouse_open_price[], digits=price_precision[])
         _stop_price = round(mouse_stop_price[], digits=price_precision[])
         _profit_price = round(mouse_profit_price[], digits=price_precision[])
-        _quantity = round(wallet_balance[] * 10 / _open_price, digits=quantity_precision[])
+        _quantity = round(wallet_balance[] * leverage[] * 0.95 / _open_price, digits=quantity_precision[])
 
         open_order_dict = create_open_order_dict(coin_pair[], order_side[], _quantity, _open_price, long_or_short[])
         stop_order_dict = create_stop_order_dict(coin_pair[], stop_order_side[], _quantity, _stop_price, long_or_short[])
@@ -240,6 +240,7 @@ deactivate_interaction!(ax2, :rectanglezoom)
 lines!(ax2, ACCI, color=:blue)
 vlines!(ax2, mouse_pos_x, color=:red, linestyle=:dash, linewidth=1)
 hlines!(ax2, 0, color=:black, linestyle=:dash, linewidth=0.5)
+hlines!(ax2, -70, color=:purple, linewidth=0.5)
 hlines!(ax2, -100, color=:red, linewidth=0.5)
 hlines!(ax2, 100, color=:red, linewidth=0.5)
 ylims!(ax2, -200, 200)

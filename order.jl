@@ -207,13 +207,6 @@ function cancel_no_use_order(user, symbol, has_position, has_open_order, has_sto
     return
 end
 
-function create(user, symbol, has_position, has_open_order, has_stop_order, has_profit_order)
-    if (!has_position) & (!has_open_order) & (has_stop_order || has_profit_order)
-        cancel_all_open_orders(user, symbol)
-    end
-    return
-end
-
 cancel_open_order(user, symbol) = cancel_order(user, symbol; clientOrderId="open")
 cancel_stop_order(user, symbol) = cancel_order(user, symbol; clientOrderId="stop")
 cancel_profit_order(user, symbol) = cancel_order(user, symbol; clientOrderId="profit")

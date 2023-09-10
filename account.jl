@@ -21,7 +21,7 @@ Get account information.
 function get_account_info(user)
     query = query_head()
     signature = do_sign(query, user)
-    body = "$BINANCE_FUTURE_BASE_URL/fapi/v1/account?$query&signature=$signature"
+    body = "$BINANCE_FUTURE_BASE_URL/fapi/v2/account?$query&signature=$signature"
     response = HTTP.request("GET", body, user.headers)
 
     if response.status != 200
