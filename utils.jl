@@ -123,16 +123,16 @@ end
 
 
 function cal_profit_price(long_or_short, open_price, profit_pct)
-    if long_or_short == "LONG" 
-        open_price * (1 + profit_pct) 
+    if long_or_short == "LONG"
+        open_price * (1 + profit_pct)
     else
         open_price * (1 - profit_pct)
     end
 end
 
 function cal_stop_price(long_or_short, open_price, stop_pct)
-    if long_or_short == "LONG" 
-        open_price * (1 - stop_pct) 
+    if long_or_short == "LONG"
+        open_price * (1 - stop_pct)
     else
         open_price * (1 + stop_pct)
     end

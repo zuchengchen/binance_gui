@@ -164,7 +164,17 @@ end
 
 function get_presions(symbol)
     symbol_info = filter(x -> x["symbol"] == symbol, get_Binance_info()["symbols"])[1]
-    symbol_info["pricePrecision"], symbol_info["quantityPrecision"]
+    price_presion, quantity_presion = 0, 0
+    for item in symbol_info["filters"]
+        if item["filterType"] == "PRICE_FILTER"
+            price_presion = Int(log10(1.0 / parse(Float64, item["tickSize"])))
+        end
+        if item["filterType"] == "LOT_SIZE"
+            quantity_presion = Int(log10(1.0 / parse(Float64, item["stepSize"])))
+        end
+    end
+
+    price_presion, quantity_presion
 end
 
 function get_current_position(user, symbol)
@@ -198,6 +208,9 @@ end
 create_open_order_dict(symbol, side, quantity, price, positionSide) = create_order_dict(symbol, "LIMIT", side; quantity=quantity, price=price, newClientOrderId="open", positionSide=positionSide)
 create_stop_order_dict(symbol, side, quantity, stopPrice, positionSide) = create_order_dict(symbol, "STOP_MARKET", side; quantity=quantity, stopPrice=stopPrice, newClientOrderId="stop", positionSide=positionSide)
 create_profit_order_dict(symbol, side, quantity, price, positionSide) = create_order_dict(symbol, "TAKE_PROFIT", side; quantity=quantity, stopPrice=price, price=price, newClientOrderId="profit", positionSide=positionSide)
+
+# 市价平仓单
+create_maket_order_dict(symbol, side, quantity, positionSide) = create_order_dict(symbol, "MARKET", side; quantity=quantity, newClientOrderId="market", positionSide=positionSide)
 
 
 function cancel_no_use_order(user, symbol, has_position, has_open_order, has_stop_order, has_profit_order)
