@@ -1,0 +1,3 @@
+将文件api_key.json.example名字改成api_key.json并加入自己的api
+
+目前只支持Linux系统和Binance交易所
