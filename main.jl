@@ -1,10 +1,13 @@
 include("init.jl")
-const kline_limit = 500 # number of candlesticks (klines) to fetch and show
+using Indicators
+const kline_limit = 100 # number of candlesticks (klines) to fetch and show
 
-coin_pair = Observable("BLZUSDT")
+best_trading_pairs = get_best_trading_pairs()
+
+coin_pair = Observable(best_trading_pairs[1])
 time_interval = Observable("5m")
 leverage = Observable(8)
-stop_pct = Observable(1e-1)
+stop_pct = Observable(2e-1)
 profit_pct = Observable(5e-3);
 
 # choose Long or Short mode
@@ -23,8 +26,8 @@ user = User("api_key.json");
 account_info = get_account_info(user)
 _margin_mode = @lift change_margin_mode(user, $coin_pair, "ISOLATED")
 # 单资产模式
-change_multi_assets_mode(user, "single")
-change_position_mode(user, "hedge")
+# change_multi_assets_mode(user, "single")
+# change_position_mode(user, "hedge")
 _leverage = @lift change_leverage(user, $coin_pair, $leverage)
 
 base_coin = Observable("USDT")
@@ -82,8 +85,8 @@ cmap = [:red, :green]
 vratio = 4;
 hratio = 4;
 
-mouse_text_coor = kline_limit * 0.8
-order_text_coor = kline_limit # the x-coordinate where to put the text
+mouse_text_coor = kline_limit * 0.5
+order_text_coor = kline_limit * 0.7 # the x-coordinate where to put the text
 
 x_min = -3
 x_max = kline_limit * 1.2
@@ -91,12 +94,15 @@ x_max = kline_limit * 1.2
 fig = Figure(font="sans", fontsize=20);
 
 ax1 = Axis(fig[1:vratio, 1:hratio], title=coin_pair, yaxisposition=:right)
-deactivate_interaction!(ax1, :rectanglezoom)
+# deactivate_interaction!(ax1, :rectanglezoom)
 
-# plot kline
+# k线图
 barplot!(ax1, 1:kline_limit, Open, fillto=Close, color=colors, strokewidth=0.5, strokecolor=colors, colormap=cmap)
 linesegments!(ax1, linesegs, color=colors, colormap=cmap)
 hlines!(ax1, last_price, color=last_color, linestyle=:dash, linewidth=1)
+
+last_price_text = @lift string($last_price)
+text!(ax1, mouse_text_coor, last_price, text=last_price_text, color=last_color)
 
 # 改变做多或做空模式
 on(events(ax1).keyboardbutton) do event
@@ -115,12 +121,13 @@ mouse_pos = lift(events(ax1).mouseposition) do mp
 end
 
 mouse_pos_x = @lift $mouse_pos[1]
+mouse_pos_y = @lift $mouse_pos[2]
 mouse_open_price = @lift round(Float($mouse_pos[2]), digits=$price_precision)
 mouse_stop_price = @lift round(cal_stop_price($long_or_short, $mouse_open_price, $stop_pct), digits=$price_precision)
 mouse_profit_price = @lift round(cal_profit_price($long_or_short, $mouse_open_price, $profit_pct), digits=$price_precision)
 
 # 开仓数量
-quantity = @lift floor($wallet_balance * $leverage / $mouse_open_price, digits=$quantity_precision)
+quantity = @lift floor($wallet_balance * $leverage * 0.99 / $mouse_open_price, digits=$quantity_precision)
 
 # 止赢、止损、开仓对应水平线
 vlines!(ax1, mouse_pos_x, color=:red, linestyle=:dash, linewidth=1)
@@ -140,19 +147,16 @@ text!(ax1, mouse_text_coor, mouse_profit_price, text=mouse_profit_price_text, co
 
 scatter!(ax1, mouse_pos; markersize=10, color=:red)
 xlims!(ax1, x_min, x_max)
-ylims!(ax1, y_min[], y_max[])
+# ylims!(ax1, y_min[], y_max[])
 
 
 # menus 
-menu_symbol = Menu(fig, options=["GALUSDT", "CYBERUSDT", "MTLUSDT", "OPUSDT", "BLZUSDT", "ENJUSDT", "HIGHUSDT", "FETUSDT", "DUSKUSDT",
-        "TRBUSDT", "STORJUSDT", "XVGUSDT", "XVSUSDT", "RNDRUSDT", "XLMUSDT",
-        "BTCUSDT", "EOSUSDT", "ETHUSDT", "ETCUSDT", "FLMUSDT", "CHRUSDT", "AGLDUSDT",
-        "ACHUSDT", "WAVESUSDT", "MDTUSDT", "SFPUSDT"],
+menu_symbol = Menu(fig, options=best_trading_pairs,
     default=coin_pair[])
-menu_time_interval = Menu(fig, options=["1m", "3m", "5m", "15m", "1h", "4h"], default=time_interval[])
+menu_time_interval = Menu(fig, options=["1m", "5m", "15m", "30m", "1h", "4h"], default=time_interval[])
 menu_leverage = Menu(fig, options=zip(["3", "5", "8", "10"], [3, 5, 8, 10]), default=string(leverage[]))
-menu_stop = Menu(fig, options=zip(["1", "2", "3", "4", "5", "10", "100"], [1e-3, 2e-3, 3e-3, 4e-3, 5e-3, 1e-2, 1e-1]), default=string(Int(stop_pct[] * 1000)))
-menu_profit = Menu(fig, options=zip(["1", "2", "3", "4", "5", "10"], [1e-3, 2e-3, 3e-3, 4e-3, 5e-3, 1e-2]), default=string(Int(profit_pct[] * 1000)))
+menu_stop = Menu(fig, options=zip(["1", "2", "3", "4", "5", "10", "100", "200"], [1e-3, 2e-3, 3e-3, 4e-3, 5e-3, 1e-2, 1e-1, 2e-1]), default=string(Int(stop_pct[] * 1000)))
+menu_profit = Menu(fig, options=zip(["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"], [1e-3, 2e-3, 3e-3, 4e-3, 5e-3, 6e-3, 7e-3, 8e-3, 9e-3, 1e-2]), default=string(Int(profit_pct[] * 1000)))
 
 # 右边菜单
 fig[1:vratio+1, hratio+1] = vgrid!(
@@ -233,14 +237,14 @@ on(events(ax1).keyboardbutton) do event
         _open_price = mouse_open_price[]
         _stop_price = mouse_stop_price[]
         _profit_price = mouse_profit_price[]
-        _quantity = floor(wallet_balance[] * leverage[] / _open_price, digits=quantity_precision[])
+        _quantity = floor(wallet_balance[] * leverage[] * 0.99 / _open_price, digits=quantity_precision[])
 
         open_order_dict = create_open_order_dict(coin_pair[], order_side[], _quantity, _open_price, long_or_short[])
-        stop_order_dict = create_stop_order_dict(coin_pair[], stop_order_side[], _quantity, _stop_price, long_or_short[])
-        profit_order_dict = create_profit_order_dict(coin_pair[], stop_order_side[], _quantity, _profit_price, long_or_short[])
+        # stop_order_dict = create_stop_order_dict(coin_pair[], stop_order_side[], _quantity, _stop_price, long_or_short[])
+        # profit_order_dict = create_profit_order_dict(coin_pair[], stop_order_side[], _quantity, _profit_price, long_or_short[])
         execute_order(open_order_dict, user)
-        execute_order(stop_order_dict, user)
-        execute_order(profit_order_dict, user)
+        # execute_order(stop_order_dict, user)
+        # execute_order(profit_order_dict, user)
 
         coin_pair[] = coin_pair[]
     end
@@ -283,6 +287,29 @@ end
 # ylims!(ax2, -200, 200)
 # linkxaxes!(ax1, ax2)
 
+# MACD indicator
+macds = @lift macd($Close)[:, 3]
+max_macd = @lift maximum(skipmissing(isnan(x) ? missing : x for x in abs.($macds))) * 1.1
+min_macd = @lift -$max_macd
+
+function get_macd_colors(macds)
+    macds2 = copy(macds)
+    pushfirst!(macds2, NaN)
+    colors = (macds[1:end] .> macds2[1:end-1])
+    colors
+end
+
+macd_colors = @lift get_macd_colors($macds)
+
+ax2 = Axis(fig[vratio+1, 1:hratio], title="MACD", yaxisposition=:right)
+# deactivate_interaction!(ax2, :rectanglezoom)
+
+vlines!(ax2, mouse_pos_x, color=:red, linestyle=:dash, linewidth=1)
+hlines!(ax2, mouse_pos_y, color=:red, linestyle=:dash, linewidth=1)
+barplot!(ax2, 1:kline_limit, macds, color=macd_colors, colormap=cmap)
+ylims!(ax2, min_macd[], max_macd[])
+
+linkxaxes!(ax1, ax2)
 display(fig)
 
 tt = 1
@@ -294,14 +321,18 @@ while tt < 5000
 
     # 如果有仓位但没有止盈单，补挂止赢单
     if (has_position[]) & (!has_profit_order[])
-        _position = get_current_position(user, coin_pair[])[1]
-        _long_or_short = _position["positionSide"]
-        _stop_order_side = (_long_or_short == "LONG" ? "SELL" : "BUY")
-        _open_price = parse(Float64, _position["entryPrice"])
-        _profit_price = round(cal_profit_price(_long_or_short, _open_price, profit_pct[]), digits=price_precision[])
-        _quantity = abs(parse(Float64, _position["positionAmt"]))
-        profit_order_dict = create_profit_order_dict(coin_pair[], _stop_order_side, _quantity, _profit_price, _long_or_short)
-        execute_order(profit_order_dict, user)
+
+        _position0 = get_current_position(user, coin_pair[])
+        if !(isempty(_position0))
+            _position = _position0[1]
+            _long_or_short = _position["positionSide"]
+            _stop_order_side = (_long_or_short == "LONG" ? "SELL" : "BUY")
+            _open_price = parse(Float64, _position["entryPrice"])
+            _profit_price = round(cal_profit_price(_long_or_short, _open_price, profit_pct[]), digits=price_precision[])
+            _quantity = abs(parse(Float64, _position["positionAmt"]))
+            profit_order_dict = create_profit_order_dict(coin_pair[], _stop_order_side, _quantity, _profit_price, _long_or_short)
+            execute_order(profit_order_dict, user)
+        end
     end
     # sleep(0.005)
     global tt += 1

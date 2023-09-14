@@ -1,6 +1,7 @@
 # add CairoMakie, Random, TimeSeries, Dates, GLMakie, DataFrames, DataStructures, ProgressMeter, JSON, HTTP, SHA, Printf, CSV, Indicators
 # using CairoMakie, Random, TimeSeries, GLMakie, DataFrames, DataStructures, ProgressMeter
 using CairoMakie, GLMakie, DataFrames
+using Statistics
 import HTTP, JSON, SHA, CSV, Indicators, Dates
 
 const Float = Float64

@@ -174,3 +174,34 @@ function change_multi_assets_mode(user, mode)
         response_to_json(response.body)["msg"]
     end
 end
+
+function get_valid_coin_pairs()
+    exchange_info = get_Binance_info()
+
+    coin_pairs = []
+    for s in exchange_info["symbols"]
+        if (s["marginAsset"] == "USDT") & (s["contractType"] == "PERPETUAL") & (s["status"] == "TRADING")
+            push!(coin_pairs, s["pair"])
+        end
+    end
+
+    coin_pairs
+end
+
+function cal_price_diff(coin_pair)
+    ohlcs = get_ohlc(coin_pair, "1m", 60)
+    High = ohlcs[2]
+    Low = ohlcs[3]
+
+    price_diffs = @. High / Low - 1
+    mean(price_diffs)
+end
+
+# get the best 20 coin pairs according to the price diffs
+function get_best_trading_pairs()
+    coin_pairs = get_valid_coin_pairs()
+
+    price_diffs = [cal_price_diff(coin_pair) for coin_pair in coin_pairs]
+    new_inds = sortperm(price_diffs, rev=true)
+    coin_pairs[new_inds][1:20]
+end
